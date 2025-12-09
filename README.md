@@ -55,13 +55,13 @@ geopandas
 ## SafePath Demo
 
 ### Generating Route
-![](assets/segment_1.gif)
+![](assets/demo1.gif)
 
 ### Show the Heatmap
-![](assets/segment_2.gif)
+![](assets/demo2.gif)
 
 ### User Report
-![](assets/segment_3.gif)
+![](assets/demo3.gif)
 
 ## How to Run
 

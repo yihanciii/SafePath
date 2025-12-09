@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SafePath</title>
+
+  <!-- Mapbox GL -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: #f5f5f5;
+    }
+
+    /* ========== Mobile adaptation ========== */
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+      }
+
+      #map {
+        width: 100% !important;
+        height: 50vh !important;
+        flex: none;
+      }
+
+      #panel {
+        width: 100% !important;
+        height: 50vh !important;
+        flex: none;
+        padding: 12px;
+        overflow-y: auto;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      #title {
+        font-size: 36px !important;
+        margin: 0 0 8px 0;
+      }
+
+      label {
+        font-size: 14px !important;
+      }
+
+      button {
+        font-size: 14px !important;
+        padding: 10px 12px !important;
+        border-radius: 8px;
+        border: none;
+        background: #009a44;
+        color: white;
+        font-weight: 500;
+      }
+
+      button:active {
+        transform: scale(0.98);
+        opacity: 0.8;
+      }
+
+      input[type="text"] {
+        font-size: 16px !important;
+        padding: 10px 12px !important;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+      }
+
+      .input-label-section {
+        margin-top: 6px !important;
+      }
+
+      .or-divider {
+        margin: 6px 0 !important;
+        font-size: 12px !important;
+      }
+    }
+
+    /* ========== Desktop layout ========== */
+    @media (min-width: 769px) {
+      #map {
+        flex: 2;
+      }
+
+      #panel {
+        flex: 1;
+        padding: 16px;
+        box-shadow: -2px 0 6px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow-y: auto;
+      }
+    }
+
+    /* ========== General style========== */
+    /* Let the map be the parent element for positioning */
+    #map-wrapper {
+      position: relative;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* Public button style: Floating on the map */
+    #report-btn-map,
+    #heatmap-toggle {
+      position: absolute;
+      right: 10px;              
+      z-index: 10;
+      background: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0;
+      box-shadow: 0 0 2px rgba(0,0,0,0.1);
+      cursor: pointer;
+      font-size: 16px;
+      width: 29px;
+      height: 29px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      line-height: 1;
+    }
+    
+    /* Button hover and press effects (Both buttons are compatible) */
+    #report-btn-map:hover,
+    #heatmap-toggle:hover {
+      background: #f7f7f7;
+    }
+    
+    #report-btn-map:active,
+    #heatmap-toggle:active {
+      background: #e8e8e8;
+    }
+    
+    /* The Report is under the zoom control */
+    #report-btn-map {
+      top: 110px;      
+    }
+    
+    #heatmap-toggle {
+      top: 152px;     
+    }
+    
+ 
+    #heatmap-toggle.active {
+      background: #009a44;
+    }
+    
+    #heatmap-toggle.active:hover {
+      background: #008038;
+    }
+    
+
+    /* Thermal diagram example */
+    #heatmap-legend {
+      position: absolute;
+      bottom: 30px;
+      right: 10px;
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 10;
+      font-size: 12px;
+    }
+
+    #heatmap-legend.hidden {
+      display: none;
+    }
+
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .legend-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 3px;
+    }
+
+    #title {
+      color: #009a44;
+      font-size: 72px;
+      margin: 0 0 10px 0;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    label {
+      font-size: 16px;
+      font-weight: 500;
+      color: #333;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      padding: 8px 12px;
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 10px 16px;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s;
+      border: none;
+      border-radius: 6px;
+      background: #009a44;
+      color: white;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:active {
+      opacity: 0.7;
+    }
+
+    .metric {
+      font-size: 14px;
+      margin-top: 6px;
+      color: #555;
+    }
+
+    /* -------- Path option layout (vertical)-------- */
+    .route-options-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .route-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .route-option:hover {
+      background: #f5f5f5;
+    }
+
+    .route-option input[type="radio"] {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #009a44;
+    }
+
+    .route-option-content {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .route-label-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    .path-risk-label {
+      font-size: 14px;
+      color: #666;
+      font-weight: 400;
+    }
+
+    .route-option:has(input:checked) {
+      border-color: #009a44;
+      background: #f0f9f4;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 20px;
+    }
+    
+    .modal.hidden {
+      display: none;
+    }
+    
+    .modal-content {
+      background: #ffffff;
+      color: #000000;
+      padding: 24px;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      font-size: 14px;
+    }
+    
+    .modal-content h3 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      color: #009a44;
+      font-size: 20px;
+    }
+    
+    .field-row {
+      margin-bottom: 16px;
+    }
+    
+    .field-row label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .field-row input[type="text"],
+    .field-row select,
+    .field-row textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .field-row textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    .severity-options {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+    
+    .severity-options label {
+      flex: 1;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .severity-options label:hover {
+      background: #f5f5f5;
+    }
+
+    .severity-options input[type="radio"] {
+      display: none;
+    }
+
+    .severity-options label:has(input:checked) {
+      background: #009a44;
+      border-color: #009a44;
+      color: white;
+    }
+    
+    .modal-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .modal-buttons button {
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      width: auto;
+    }
+    
+    #report-cancel {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    #report-cancel:hover {
+      background: #e0e0e0;
+    }
+    
+    #report-submit {
+      background: #009a44;
+      color: white;
+    }
+
+    #report-submit:hover {
+      background: #008038;
+    }
+
+    .input-with-button {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .input-with-button input {
+      flex: 1;
+    }
+
+    .input-with-button button {
+      width: auto;
+      padding: 8px 16px;
+      white-space: nowrap;
+      background: #009a44;
+      color: white;
+      border: none;
+      border-radius: 6px;
+    }
+
+    .location-btn {
+      background: linear-gradient(135deg, #4285F4 0%, #357ABD 100%);
+      color: white;
+      border: none;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
+    }
+
+    .location-btn:active {
+      transform: scale(0.98);
+    }
+
+    .input-label-section {
+      margin-top: 12px;
+      margin-bottom: 12px;
+    }
+
+    .or-divider {
+      text-align: center;
+      color: #999;
+      font-size: 13px;
+      margin: 8px 0;
+      position: relative;
+    }
+
+    .or-divider::before,
+    .or-divider::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: #ddd;
+    }
+
+    .or-divider::before {
+      left: 0;
+    }
+
+    .or-divider::after {
+      right: 0;
+    }
+
+    #panel {
+      -webkit-overflow-scrolling: touch;
+    }
+
+    button,
+    input,
+    select {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* ========== Address search drop-down box ========== */
+    .search-container {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 100;
+      margin-top: 4px;
+    }
+
+    .search-results.hidden {
+      display: none;
+    }
+
+    .search-result-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.2s;
+    }
+
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
+
+    .search-result-item:hover {
+      background: #f5f5f5;
+    }
+
+    .search-result-item:active {
+      background: #e8e8e8;
+    }
+
+    .result-name {
+      font-weight: 500;
+      color: #333;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .result-address {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .no-results {
+      padding: 16px;
+      text-align: center;
+      color: #999;
+      font-size: 13px;
+    }
+
+    /* 移动端优化 */
+    @media (max-width: 768px) {
+      .search-results {
+        max-height: 200px;
+      }
+      
+      .search-result-item {
+        padding: 10px 12px;
+      }
+      
+      .result-name {
+        font-size: 13px;
+      }
+      
+      .result-address {
+        font-size: 11px;
+      }
+
+      #heatmap-legend {
+        bottom: 10px;
+        right: 10px;
+        font-size: 11px;
+        padding: 10px;
+      }
+    /* ======== Enlarge the Mapbox zoom control (Mobile only) ======== */
+    
+    /* Enlarge the size of the zooming button body */
+    .mapboxgl-ctrl-zoom-in,
+    .mapboxgl-ctrl-zoom-out,
+    .mapboxgl-ctrl-compass {
+      width: 42px !important;    
+      height: 42px !important;
+    }
+    
+    .mapboxgl-ctrl-zoom-in .mapboxgl-ctrl-icon,
+    .mapboxgl-ctrl-zoom-out .mapboxgl-ctrl-icon {
+      font-size: 26px !important; 
+      line-height: 42px !important;
+    }
+    
+    .mapboxgl-ctrl-compass .mapboxgl-ctrl-icon {
+      background-size: 85% !important;
+    }
+    
+    .mapboxgl-ctrl-group > button {
+      margin-bottom: 6px !important;
+    }
+    /* ===== Mobile device: Adjust the positions of your two buttons ===== */
+    
+    #report-btn-map {
+      top: 190px !important; 
+      right: 10px !important;
+    }
+    
+    #heatmap-toggle {
+      top: 240px !important;  
+      right: 10px !important;
+    }
+    /* ===== Adjustment of button spacing on mobile devices===== */
+    
+    #get-path-btn {
+      margin-bottom: 12px !important;   
+    }
+    
+    #load-reports-btn {
+      margin-top: 12px !important;     
+    }
+    /* ===== For mobile devices: Place the risk legend at the lower left corner ===== */
+    #heatmap-legend {
+      position: absolute;
+      bottom: 20px !important;
+      left: 20px !important;
+      right: auto !important;   
+      max-width: 160px;         
+      z-index: 9999;            
+    }
+
+
+    }
+  </style>
+</head>
+
+<body>
+      <!-- Map container-->
+    <div id="map">
+      <!-- Report button -->
+      <button id="report-btn-map" title="Report Incident">⚠️</button>
+    
+      <!-- Heat map button -->
+      <button id="heatmap-toggle" title="Toggle Risk Heatmap">🗺️</button>
+    
+      <!-- Thermal diagram example -->
+      <div id="heatmap-legend" class="hidden">
+        <div class="legend-title">Risk Level</div>
+    
+        <div class="legend-item">
+          <div class="legend-color" style="background: #FF8F00;"></div>
+          <span>Very High (0.43–0.83)</span>
+        </div>
+    
+        <div class="legend-item">
+          <div class="legend-color" style="background: #FFCA28;"></div>
+          <span>High (0.33–0.43)</span>
+        </div>
+    
+        <div class="legend-item">
+          <div class="legend-color" style="background: #FFE082;"></div>
+          <span>Medium (0.21–0.33)</span>
+        </div>
+    
+        <div class="legend-item">
+          <div class="legend-color" style="background: #FFF9C4;"></div>
+          <span>Low (&lt;0.21)</span>
+        </div>
+      </div>
+    </div>
+
+
+  <div id="panel">
+    <h1 id="title">Safepath</h1>
+
+    <!-- ========== Starting point selection========== -->
+    <div class="input-label-section">
+      <label>Start Location:</label>
+      
+      <button id="use-my-location-btn" class="location-btn">
+        📍 Use My Current Location
+      </button>
+
+      <div class="or-divider">— OR —</div>
+
+      <div class="search-container">
+        <div class="input-with-button">
+          <input 
+            id="start-input" 
+            type="text" 
+            placeholder="Search address in NYC..."
+            autocomplete="off"
+          />
+          <button id="search-start-btn">Search</button>
+        </div>
+        <div id="start-results" class="search-results hidden"></div>
+      </div>
+
+      <div class="or-divider">— OR —</div>
+
+      <button id="click-start-btn">Click Map to Set Start</button>
+    </div>
+
+    <!-- ========== Destination selection========== -->
+    <div class="input-label-section">
+      <label>End Location:</label>
+      
+      <div class="search-container">
+        <div class="input-with-button">
+          <input 
+            id="end-input" 
+            type="text" 
+            placeholder="Search address in NYC..."
+            autocomplete="off"
+          />
+          <button id="search-end-btn">Search</button>
+        </div>
+        <div id="end-results" class="search-results hidden"></div>
+      </div>
+
+      <div class="or-divider">— OR —</div>
+
+      <button id="click-end-btn">Click Map to Set End</button>
+    </div>
+
+    <button id="route-btn">Get Safest Path</button>
+    <button id="load-reports-btn">Load Nearby Reports</button>
+
+    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 16px 0;" />
+
+    <p style="font-weight: 600; margin-bottom: 8px; font-size: 16px;">Path Options:</p>
+
+    <div class="route-options-container">
+      <label class="route-option">
+        <input
+          type="radio"
+          name="route-choice"
+          class="route-radio"
+          value="0"
+          checked
+        />
+        <div class="route-option-content">
+          <span class="route-label-text">Path 1 (safest)</span>
+          <span class="path-risk-label" id="path-risk-0"></span>
+        </div>
+      </label>
+
+      <label class="route-option">
+        <input
+          type="radio"
+          name="route-choice"
+          class="route-radio"
+          value="1"
+        />
+        <div class="route-option-content">
+          <span class="route-label-text">Path 2</span>
+          <span class="path-risk-label" id="path-risk-1"></span>
+        </div>
+      </label>
+
+      <label class="route-option">
+        <input
+          type="radio"
+          name="route-choice"
+          class="route-radio"
+          value="2"
+        />
+        <div class="route-option-content">
+          <span class="route-label-text">Path 3</span>
+          <span class="path-risk-label" id="path-risk-2"></span>
+        </div>
+      </label>
+    </div>
+    
+    <div class="metric">
+      Selected Path Distance:
+      <span id="metric-distance">-</span>
+    </div>
+
+    <div class="metric">
+      Reports Loaded:
+      <span id="metric-reports">0</span>
+    </div>
+  </div>
+
+<!-- Report Incident Modal -->
+<div id="report-modal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Report an Incident</h3>
+
+    <div class="field-row">
+      <label>Severity:</label>
+      <div class="severity-options">
+        <label><input type="radio" name="incident-severity" value="1">1</label>
+        <label><input type="radio" name="incident-severity" value="2">2</label>
+        <label><input type="radio" name="incident-severity" value="3">3</label>
+        <label><input type="radio" name="incident-severity" value="4">4</label>
+        <label><input type="radio" name="incident-severity" value="5">5</label>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label for="incident-category">Category:</label>
+      <select id="incident-category">
+        <option value="">-- select a category --</option>
+        <option value="harassment">Harassment</option>
+        <option value="robbery">Robbery / theft</option>
+        <option value="assault">Assault / physical threat</option>
+        <option value="poor_lighting">Poor lighting</option>
+        <option value="suspicious_activity">Suspicious activity</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="field-row">
+      <input
+        id="incident-category-other"
+        type="text"
+        placeholder="If other, please describe..."
+      />
+    </div>
+
+    <div class="field-row">
+      <label for="incident-details">Details:</label>
+      <textarea
+        id="incident-details"
+        placeholder="What happened? Please add any useful context."
+      ></textarea>
+    </div>
+
+    <div class="modal-buttons">
+      <button id="report-cancel">Cancel</button>
+      <button id="report-submit">Submit Report</button>
+    </div>
+  </div>
+</div>
+  <script src="map.js"></script>
+</body>
+</html>
